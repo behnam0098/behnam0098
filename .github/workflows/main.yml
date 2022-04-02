@@ -1,36 +1,95 @@
-# This is a basic workflow to help you get started with Actions
 
-name: CI
-
-# Controls when the workflow will run
+1
 on:
-  # Triggers the workflow on push or pull request events but only for the main branch
+2
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+3
+    branches:
+4
+      - master
+5
+​
+6
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+7
+​
+8
+  build_and_push:
+9
+    name: Build, push, and deploy Docker image to DO Container Registry
+10
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
+11
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
-
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
-        run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+12
+​
+13
+    - name: Checkout master
+14
+      uses: actions/checkout@master
+15
+​
+16
+    - name: Build container image latest version
+17
+      run: docker build -t registry.digitalocean.com/acme/app:latest .
+18
+​
+19
+    - name: Install doctl
+20
+      uses: digitalocean/action-doctl@v2
+21
+      with:
+22
+        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+23
+​
+24
+    - name: Log in to DigitalOcean Container Registry with short-lived credentials
+25
+      run: doctl registry login --expiry-seconds 600
+26
+​
+27
+    - name: Push image to DigitalOcean Container Registry
+28
+      run: docker push registry.digitalocean.com/acme/app:latest
+29
+​
+30
+  deploy:
+31
+    runs-on: ubuntu-latest
+32
+    needs: build_and_push
+33
+​
+34
+    steps:
+35
+      - name: Deploy to Digital Ocean droplet via SSH action
+36
+        uses: appleboy/ssh-action@v0.1.3
+37
+        with:
+38
+          host: ${{ secrets.HOST }}
+39
+          username: ${{ secrets.USERNAME }}
+40
+          password: ${{ secrets.PASSWORD }}
+41
+          port: 22
+42
+          script: |
+43
+            cd acme.app
+44
+            docker-compose stop
+45
+            docker-compose rm -f
+46
+            docker-compose pull
+47
+            docker-compose up -d
